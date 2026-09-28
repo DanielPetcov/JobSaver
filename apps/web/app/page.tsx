@@ -1,47 +1,506 @@
-'use client';
+"use client";
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
-const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001/api';
-const STATUSES = ['APPLIED', 'SCREENING', 'INTERVIEW', 'OFFER', 'REJECTED', 'WITHDRAWN', 'ARCHIVED'] as const;
+const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:3001/api";
+const STATUSES = [
+  "APPLIED",
+  "SCREENING",
+  "INTERVIEW",
+  "OFFER",
+  "REJECTED",
+  "WITHDRAWN",
+  "ARCHIVED",
+] as const;
 type Status = (typeof STATUSES)[number];
-type Draft = { id?: string; sourceUrl: string; companyName: string; jobTitle: string; companyWebsiteUrl: string; shortDescription: string; skills: string; status: Status };
-type Application = Omit<Draft, 'skills' | 'companyWebsiteUrl' | 'shortDescription'> & { id: string; companyWebsiteUrl: string | null; shortDescription: string | null; skills: { id: string; name: string }[]; dateApplied: string };
-const emptyDraft: Draft = { sourceUrl: '', companyName: '', jobTitle: '', companyWebsiteUrl: '', shortDescription: '', skills: '', status: 'APPLIED' };
+type Draft = {
+  id?: string;
+  sourceUrl: string;
+  companyName: string;
+  jobTitle: string;
+  companyWebsiteUrl: string;
+  shortDescription: string;
+  skills: string;
+  status: Status;
+};
+type Application = Omit<
+  Draft,
+  "skills" | "companyWebsiteUrl" | "shortDescription"
+> & {
+  id: string;
+  companyWebsiteUrl: string | null;
+  shortDescription: string | null;
+  skills: { id: string; name: string }[];
+  dateApplied: string;
+};
+const emptyDraft: Draft = {
+  sourceUrl: "",
+  companyName: "",
+  jobTitle: "",
+  companyWebsiteUrl: "",
+  shortDescription: "",
+  skills: "",
+  status: "APPLIED",
+};
 
-function message(error: unknown): string { return error instanceof Error ? error.message : 'Something went wrong.'; }
+function message(error: unknown): string {
+  return error instanceof Error ? error.message : "Something went wrong.";
+}
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API}${path}`, { ...init, headers: { 'content-type': 'application/json', ...init?.headers } });
+  const response = await fetch(`${API}${path}`, {
+    ...init,
+    headers: { "content-type": "application/json", ...init?.headers },
+  });
   if (response.status === 204) return undefined as T;
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(Array.isArray(payload.message) ? payload.message.join('. ') : payload.message ?? 'Request failed');
+  if (!response.ok)
+    throw new Error(
+      Array.isArray(payload.message)
+        ? payload.message.join(". ")
+        : (payload.message ?? "Request failed"),
+    );
   return payload as T;
 }
-function draftFrom(application: Application): Draft { return { id: application.id, sourceUrl: application.sourceUrl, companyName: application.companyName, jobTitle: application.jobTitle, companyWebsiteUrl: application.companyWebsiteUrl ?? '', shortDescription: application.shortDescription ?? '', skills: application.skills.map((skill) => skill.name).join(', '), status: application.status }; }
-function date(value: string): string { return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', year: 'numeric' }).format(new Date(value)); }
-function label(status: string): string { return status.charAt(0) + status.slice(1).toLowerCase(); }
+function draftFrom(application: Application): Draft {
+  return {
+    id: application.id,
+    sourceUrl: application.sourceUrl,
+    companyName: application.companyName,
+    jobTitle: application.jobTitle,
+    companyWebsiteUrl: application.companyWebsiteUrl ?? "",
+    shortDescription: application.shortDescription ?? "",
+    skills: application.skills.map((skill) => skill.name).join(", "),
+    status: application.status,
+  };
+}
+function date(value: string): string {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(value));
+}
+function label(status: string): string {
+  return status.charAt(0) + status.slice(1).toLowerCase();
+}
 
 export default function Workbench(): React.ReactNode {
-  const [url, setUrl] = useState(''); const [draft, setDraft] = useState<Draft | null>(null); const [rows, setRows] = useState<Application[]>([]);
-  const [search, setSearch] = useState(''); const [filter, setFilter] = useState(''); const [loading, setLoading] = useState(true);
-  const [extracting, setExtracting] = useState(false); const [saving, setSaving] = useState(false); const [error, setError] = useState(''); const [notice, setNotice] = useState('');
-  const query = useMemo(() => new URLSearchParams({ ...(search ? { q: search } : {}), ...(filter ? { status: filter } : {}) }).toString(), [search, filter]);
-  async function load(): Promise<void> { setLoading(true); try { const response = await request<{ data: Application[] }>(`/applications?${query}`); setRows(response.data); } catch (reason) { setError(message(reason)); } finally { setLoading(false); } }
-  // The effect owns the remote list synchronization whenever the visible query changes.
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { void load(); }, [query]); // eslint-disable-line react-hooks/exhaustive-deps
-  function update(field: keyof Draft, value: string): void { setDraft((current) => current ? { ...current, [field]: value } : current); }
-  async function extract(event: FormEvent): Promise<void> { event.preventDefault(); setError(''); setNotice(''); setExtracting(true); try { const preview = await request<Omit<Draft, 'skills' | 'companyWebsiteUrl' | 'shortDescription' | 'status'> & { companyWebsiteUrl: string | null; shortDescription: string | null; skills: string[] }>('/applications/extract-preview', { method: 'POST', body: JSON.stringify({ url }) }); setDraft({ ...preview, companyWebsiteUrl: preview.companyWebsiteUrl ?? '', shortDescription: preview.shortDescription ?? '', skills: preview.skills.join(', '), status: 'APPLIED' }); } catch (reason) { setError(message(reason)); } finally { setExtracting(false); } }
-  async function save(event: FormEvent): Promise<void> { event.preventDefault(); if (!draft) return; setSaving(true); setError(''); const { id, ...fields } = draft; const body = { ...fields, skills: fields.skills.split(',').map((skill) => skill.trim()).filter(Boolean) }; try { if (id) { await request<Application>(`/applications/${id}`, { method: 'PATCH', body: JSON.stringify(body) }); setNotice('Application updated.'); } else { await request<Application>('/applications', { method: 'POST', body: JSON.stringify(body) }); setNotice('Application saved.'); } setDraft(null); setUrl(''); await load(); } catch (reason) { setError(message(reason)); } finally { setSaving(false); } }
-  async function quickStatus(application: Application, status: Status): Promise<void> { setError(''); try { await request(`/applications/${application.id}`, { method: 'PATCH', body: JSON.stringify({ status }) }); await load(); } catch (reason) { setError(message(reason)); } }
-  async function remove(application: Application): Promise<void> { if (!window.confirm(`Delete ${application.jobTitle} at ${application.companyName}?`)) return; try { await request(`/applications/${application.id}`, { method: 'DELETE' }); setNotice('Application deleted.'); await load(); } catch (reason) { setError(message(reason)); } }
+  const [url, setUrl] = useState("");
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [rows, setRows] = useState<Application[]>([]);
+  const [search, setSearch] = useState("");
+  const [filter, setFilter] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [extracting, setExtracting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const query = useMemo(
+    () =>
+      new URLSearchParams({
+        ...(search ? { q: search } : {}),
+        ...(filter ? { status: filter } : {}),
+      }).toString(),
+    [search, filter],
+  );
+  async function load(): Promise<void> {
+    setLoading(true);
+    try {
+      const response = await request<{ data: Application[] }>(
+        `/applications?${query}`,
+      );
+      setRows(response.data);
+    } catch (reason) {
+      setError(message(reason));
+    } finally {
+      setLoading(false);
+    }
+  }
+  useEffect(() => {
+    // The async request, rather than the effect itself, updates list state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void load();
+  }, [query]); // eslint-disable-line react-hooks/exhaustive-deps
+  function update(field: keyof Draft, value: string): void {
+    setDraft((current) => (current ? { ...current, [field]: value } : current));
+  }
+  async function extract(event: FormEvent): Promise<void> {
+    event.preventDefault();
+    setError("");
+    setNotice("");
+    setExtracting(true);
+    try {
+      const preview = await request<
+        Omit<
+          Draft,
+          "skills" | "companyWebsiteUrl" | "shortDescription" | "status"
+        > & {
+          companyWebsiteUrl: string | null;
+          shortDescription: string | null;
+          skills: string[];
+        }
+      >("/applications/extract-preview", {
+        method: "POST",
+        body: JSON.stringify({ url }),
+      });
+      setDraft({
+        ...preview,
+        companyWebsiteUrl: preview.companyWebsiteUrl ?? "",
+        shortDescription: preview.shortDescription ?? "",
+        skills: preview.skills.join(", "),
+        status: "APPLIED",
+      });
+    } catch (reason) {
+      setError(message(reason));
+    } finally {
+      setExtracting(false);
+    }
+  }
+  async function save(event: FormEvent): Promise<void> {
+    event.preventDefault();
+    if (!draft) return;
+    setSaving(true);
+    setError("");
+    const { id, ...fields } = draft;
+    const body = {
+      ...fields,
+      companyWebsiteUrl: fields.companyWebsiteUrl.trim() || null,
+      shortDescription: fields.shortDescription.trim() || null,
+      skills: fields.skills
+        .split(",")
+        .map((skill) => skill.trim())
+        .filter(Boolean),
+    };
+    try {
+      if (id) {
+        await request<Application>(`/applications/${id}`, {
+          method: "PATCH",
+          body: JSON.stringify(body),
+        });
+        setNotice("Application updated.");
+      } else {
+        await request<Application>("/applications", {
+          method: "POST",
+          body: JSON.stringify(body),
+        });
+        setNotice("Application saved.");
+      }
+      setDraft(null);
+      setUrl("");
+      await load();
+    } catch (reason) {
+      setError(message(reason));
+    } finally {
+      setSaving(false);
+    }
+  }
+  async function quickStatus(
+    application: Application,
+    status: Status,
+  ): Promise<void> {
+    setError("");
+    try {
+      await request(`/applications/${application.id}`, {
+        method: "PATCH",
+        body: JSON.stringify({ status }),
+      });
+      await load();
+    } catch (reason) {
+      setError(message(reason));
+    }
+  }
+  async function remove(application: Application): Promise<void> {
+    if (
+      !window.confirm(
+        `Delete ${application.jobTitle} at ${application.companyName}?`,
+      )
+    )
+      return;
+    try {
+      await request(`/applications/${application.id}`, { method: "DELETE" });
+      setNotice("Application deleted.");
+      await load();
+    } catch (reason) {
+      setError(message(reason));
+    }
+  }
 
-  return <main className="shell">
-    <header className="masthead"><div><p className="eyebrow">Personal workbench</p><h1>JobTrack</h1></div><p className="quiet">A ledger for applications you’ve made.</p></header>
-    <section className="capture" aria-labelledby="capture-title"><div><h2 id="capture-title">Capture a job</h2><p>Paste a public job-offer link. You’ll review every extracted field before it is saved.</p></div><form onSubmit={extract} className="capture-form"><label htmlFor="job-url">Job-offer URL</label><div className="url-row"><input id="job-url" type="url" required placeholder="https://company.com/careers/role" value={url} onChange={(event) => setUrl(event.target.value)} /><button type="submit" disabled={extracting}>{extracting ? 'Extracting…' : 'Extract details'}</button></div></form></section>
-    {(error || notice) && <p className={error ? 'feedback error' : 'feedback'} role={error ? 'alert' : 'status'}>{error || notice}</p>}
-    {draft && <section className="review" aria-labelledby="review-title"><div className="section-heading"><div><p className="eyebrow">{draft.id ? 'Editing application' : 'Extraction preview'}</p><h2 id="review-title">Review before saving</h2></div><button className="text-button" type="button" onClick={() => setDraft(null)}>Discard</button></div><form className="review-form" onSubmit={save}><label>Company<input required maxLength={160} value={draft.companyName} onChange={(event) => update('companyName', event.target.value)} /></label><label>Role title<input required maxLength={160} value={draft.jobTitle} onChange={(event) => update('jobTitle', event.target.value)} /></label><label className="wide">Source URL<input required type="url" value={draft.sourceUrl} onChange={(event) => update('sourceUrl', event.target.value)} /></label><label>Company website <span className="optional">optional</span><input type="url" value={draft.companyWebsiteUrl} onChange={(event) => update('companyWebsiteUrl', event.target.value)} /></label><label>Status<select value={draft.status} onChange={(event) => update('status', event.target.value)}>{STATUSES.map((status) => <option key={status}>{status}</option>)}</select></label><label className="wide">Short description <span className="optional">optional</span><textarea rows={3} maxLength={1200} value={draft.shortDescription} onChange={(event) => update('shortDescription', event.target.value)} /></label><label className="wide">Relevant skills <span className="optional">up to 3, comma-separated</span><input placeholder="TypeScript, React, PostgreSQL" value={draft.skills} onChange={(event) => update('skills', event.target.value)} /></label><div className="form-actions"><button type="submit" disabled={saving}>{saving ? 'Saving…' : draft.id ? 'Save changes' : 'Save application'}</button><button type="button" className="secondary" onClick={() => setDraft(null)}>Cancel</button></div></form></section>}
-    <section className="ledger" aria-labelledby="ledger-title"><div className="ledger-top"><div><p className="eyebrow">Saved applications</p><h2 id="ledger-title">Application ledger</h2></div><form className="filters" onSubmit={(event) => event.preventDefault()}><label className="visually-hidden" htmlFor="search">Search applications</label><input id="search" placeholder="Search company or role" value={search} onChange={(event) => setSearch(event.target.value)} /><label className="visually-hidden" htmlFor="status-filter">Filter by status</label><select id="status-filter" value={filter} onChange={(event) => setFilter(event.target.value)}><option value="">All statuses</option>{STATUSES.map((status) => <option key={status} value={status}>{label(status)}</option>)}</select></form></div>
-      {loading ? <p className="empty" role="status">Loading applications…</p> : rows.length === 0 ? <p className="empty">No applications here yet. Paste a job-offer URL above to start your ledger.</p> : <div className="table-wrap"><table><thead><tr><th scope="col">Company / role</th><th scope="col">Status</th><th scope="col">Applied</th><th scope="col">Skills</th><th scope="col"><span className="visually-hidden">Actions</span></th></tr></thead><tbody>{rows.map((application) => <tr key={application.id}><td data-label="Company / role"><strong>{application.companyName}</strong><span className="role">{application.jobTitle}</span><a href={application.sourceUrl} target="_blank" rel="noreferrer">View source<span className="visually-hidden"> for {application.jobTitle}</span></a></td><td data-label="Status"><select className={`status status-${application.status.toLowerCase()}`} aria-label={`Status for ${application.jobTitle}`} value={application.status} onChange={(event) => void quickStatus(application, event.target.value as Status)}>{STATUSES.map((status) => <option key={status}>{status}</option>)}</select></td><td data-label="Applied"><time dateTime={application.dateApplied}>{date(application.dateApplied)}</time></td><td data-label="Skills"><span className="skills">{application.skills.map((skill) => <span key={skill.id}>{skill.name}</span>)}</span></td><td className="actions"><button className="text-button" type="button" onClick={() => setDraft(draftFrom(application))}>Edit</button><button className="text-button danger" type="button" onClick={() => void remove(application)}>Delete</button></td></tr>)}</tbody></table></div>}</section>
-  </main>;
+  return (
+    <main className="shell">
+      <header className="masthead">
+        <div>
+          <p className="eyebrow">Personal workbench</p>
+          <h1>JobTrack</h1>
+        </div>
+        <p className="quiet">A ledger for applications you’ve made.</p>
+      </header>
+      <section className="capture" aria-labelledby="capture-title">
+        <div>
+          <h2 id="capture-title">Capture a job</h2>
+          <p>
+            Paste a public job-offer link. You’ll review every extracted field
+            before it is saved.
+          </p>
+        </div>
+        <form onSubmit={extract} className="capture-form">
+          <label htmlFor="job-url">Job-offer URL</label>
+          <div className="url-row">
+            <input
+              id="job-url"
+              type="url"
+              required
+              placeholder="https://company.com/careers/role"
+              value={url}
+              onChange={(event) => setUrl(event.target.value)}
+            />
+            <button type="submit" disabled={extracting}>
+              {extracting ? "Extracting…" : "Extract details"}
+            </button>
+          </div>
+        </form>
+      </section>
+      {(error || notice) && (
+        <p
+          className={error ? "feedback error" : "feedback"}
+          role={error ? "alert" : "status"}
+        >
+          {error || notice}
+        </p>
+      )}
+      {draft && (
+        <section className="review" aria-labelledby="review-title">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">
+                {draft.id ? "Editing application" : "Extraction preview"}
+              </p>
+              <h2 id="review-title">Review before saving</h2>
+            </div>
+            <button
+              className="text-button"
+              type="button"
+              onClick={() => setDraft(null)}
+            >
+              Discard
+            </button>
+          </div>
+          <form className="review-form" onSubmit={save}>
+            <label>
+              Company
+              <input
+                required
+                maxLength={160}
+                value={draft.companyName}
+                onChange={(event) => update("companyName", event.target.value)}
+              />
+            </label>
+            <label>
+              Role title
+              <input
+                required
+                maxLength={160}
+                value={draft.jobTitle}
+                onChange={(event) => update("jobTitle", event.target.value)}
+              />
+            </label>
+            <label className="wide">
+              Source URL
+              <input
+                required
+                type="url"
+                value={draft.sourceUrl}
+                onChange={(event) => update("sourceUrl", event.target.value)}
+              />
+            </label>
+            <label>
+              Company website <span className="optional">optional</span>
+              <input
+                type="url"
+                value={draft.companyWebsiteUrl}
+                onChange={(event) =>
+                  update("companyWebsiteUrl", event.target.value)
+                }
+              />
+            </label>
+            <label>
+              Status
+              <select
+                value={draft.status}
+                onChange={(event) => update("status", event.target.value)}
+              >
+                {STATUSES.map((status) => (
+                  <option key={status}>{status}</option>
+                ))}
+              </select>
+            </label>
+            <label className="wide">
+              Short description <span className="optional">optional</span>
+              <textarea
+                rows={3}
+                maxLength={1200}
+                value={draft.shortDescription}
+                onChange={(event) =>
+                  update("shortDescription", event.target.value)
+                }
+              />
+            </label>
+            <label className="wide">
+              Relevant skills{" "}
+              <span className="optional">up to 3, comma-separated</span>
+              <input
+                placeholder="TypeScript, React, PostgreSQL"
+                value={draft.skills}
+                onChange={(event) => update("skills", event.target.value)}
+              />
+            </label>
+            <div className="form-actions">
+              <button type="submit" disabled={saving}>
+                {saving
+                  ? "Saving…"
+                  : draft.id
+                    ? "Save changes"
+                    : "Save application"}
+              </button>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setDraft(null)}
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </section>
+      )}
+      <section className="ledger" aria-labelledby="ledger-title">
+        <div className="ledger-top">
+          <div>
+            <p className="eyebrow">Saved applications</p>
+            <h2 id="ledger-title">Application ledger</h2>
+          </div>
+          <form
+            className="filters"
+            onSubmit={(event) => event.preventDefault()}
+          >
+            <label className="visually-hidden" htmlFor="search">
+              Search applications
+            </label>
+            <input
+              id="search"
+              placeholder="Search company or role"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
+            <label className="visually-hidden" htmlFor="status-filter">
+              Filter by status
+            </label>
+            <select
+              id="status-filter"
+              value={filter}
+              onChange={(event) => setFilter(event.target.value)}
+            >
+              <option value="">All statuses</option>
+              {STATUSES.map((status) => (
+                <option key={status} value={status}>
+                  {label(status)}
+                </option>
+              ))}
+            </select>
+          </form>
+        </div>
+        {loading ? (
+          <p className="empty" role="status">
+            Loading applications…
+          </p>
+        ) : rows.length === 0 ? (
+          <p className="empty">
+            No applications here yet. Paste a job-offer URL above to start your
+            ledger.
+          </p>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th scope="col">Company / role</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Applied</th>
+                  <th scope="col">Skills</th>
+                  <th scope="col">
+                    <span className="visually-hidden">Actions</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((application) => (
+                  <tr key={application.id}>
+                    <td data-label="Company / role">
+                      <strong>{application.companyName}</strong>
+                      <span className="role">{application.jobTitle}</span>
+                      <a
+                        href={application.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        View source
+                        <span className="visually-hidden">
+                          {" "}
+                          for {application.jobTitle}
+                        </span>
+                      </a>
+                    </td>
+                    <td data-label="Status">
+                      <select
+                        className={`status status-${application.status.toLowerCase()}`}
+                        aria-label={`Status for ${application.jobTitle}`}
+                        value={application.status}
+                        onChange={(event) =>
+                          void quickStatus(
+                            application,
+                            event.target.value as Status,
+                          )
+                        }
+                      >
+                        {STATUSES.map((status) => (
+                          <option key={status}>{status}</option>
+                        ))}
+                      </select>
+                    </td>
+                    <td data-label="Applied">
+                      <time dateTime={application.dateApplied}>
+                        {date(application.dateApplied)}
+                      </time>
+                    </td>
+                    <td data-label="Skills">
+                      <span className="skills">
+                        {application.skills.map((skill) => (
+                          <span key={skill.id}>{skill.name}</span>
+                        ))}
+                      </span>
+                    </td>
+                    <td className="actions">
+                      <button
+                        className="text-button"
+                        type="button"
+                        onClick={() => setDraft(draftFrom(application))}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="text-button danger"
+                        type="button"
+                        onClick={() => void remove(application)}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+    </main>
+  );
 }

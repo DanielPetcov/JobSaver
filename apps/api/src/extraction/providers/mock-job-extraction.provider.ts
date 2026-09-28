@@ -24,6 +24,8 @@ const SKILLS = [
 
 @Injectable()
 export class MockJobExtractionProvider implements JobExtractionProvider {
+  readonly providerName = 'mock';
+
   async extract(page: CleanJobPage): Promise<JobExtractionResult> {
     const heading =
       page.title

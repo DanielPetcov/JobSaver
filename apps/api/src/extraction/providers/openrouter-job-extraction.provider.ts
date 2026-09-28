@@ -1,6 +1,6 @@
 import { Injectable, ServiceUnavailableException } from '@nestjs/common';
 import type { CleanJobPage } from '../../job-pages/job-page-fetcher.service';
-import type { JobExtractionProvider, JobExtractionResult } from '../job-extraction.provider';
+import { ProviderResponseError, type JobExtractionProvider, type JobExtractionResult } from '../job-extraction.provider';
 
 const extractionSchema = {
   name: 'job_extraction',
@@ -21,6 +21,8 @@ const extractionSchema = {
 
 @Injectable()
 export class OpenRouterJobExtractionProvider implements JobExtractionProvider {
+  readonly providerName = 'openrouter';
+
   async extract(page: CleanJobPage): Promise<JobExtractionResult> {
     const key = process.env.OPENROUTER_API_KEY;
     if (!key) throw new ServiceUnavailableException('OPENROUTER_API_KEY is required when AI_PROVIDER=openrouter');
@@ -60,10 +62,6 @@ export class OpenRouterJobExtractionProvider implements JobExtractionProvider {
     const payload = await response.json() as { choices?: Array<{ message?: { content?: string } }> };
     const content = payload.choices?.[0]?.message?.content;
     if (!content) throw new ServiceUnavailableException('The OpenRouter provider returned no extraction');
-    try {
-      return JSON.parse(content) as JobExtractionResult;
-    } catch {
-      throw new ServiceUnavailableException('The OpenRouter provider returned malformed JSON');
-    }
+    try { return JSON.parse(content) as JobExtractionResult; } catch { throw new ProviderResponseError('The OpenRouter provider returned malformed JSON', content); }
   }
 }

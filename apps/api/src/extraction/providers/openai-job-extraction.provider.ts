@@ -1,12 +1,11 @@
 import { Injectable, ServiceUnavailableException } from "@nestjs/common";
 import type { CleanJobPage } from "../../job-pages/job-page-fetcher.service";
-import type {
-  JobExtractionProvider,
-  JobExtractionResult,
-} from "../job-extraction.provider";
+import { ProviderResponseError, type JobExtractionProvider, type JobExtractionResult } from "../job-extraction.provider";
 
 @Injectable()
 export class OpenAiJobExtractionProvider implements JobExtractionProvider {
+  readonly providerName = 'openai';
+
   async extract(page: CleanJobPage): Promise<JobExtractionResult> {
     const key = process.env.OPENAI_API_KEY;
     if (!key)
@@ -57,12 +56,6 @@ export class OpenAiJobExtractionProvider implements JobExtractionProvider {
       throw new ServiceUnavailableException(
         "The AI provider returned no extraction",
       );
-    try {
-      return JSON.parse(content) as JobExtractionResult;
-    } catch {
-      throw new ServiceUnavailableException(
-        "The AI provider returned malformed JSON",
-      );
-    }
+    try { return JSON.parse(content) as JobExtractionResult; } catch { throw new ProviderResponseError('The AI provider returned malformed JSON', content); }
   }
 }

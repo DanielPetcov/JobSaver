@@ -17,12 +17,14 @@ import {
 } from "./dto/application.dto";
 import { ExtractionService } from "../extraction/extraction.service";
 import { ExtractPreviewDto } from "../extraction/extract-preview.dto";
+import { ExtractionDiagnosticsService } from '../extraction/extraction-diagnostics.service';
 
 @Controller("applications")
 export class ApplicationsController {
   constructor(
     private readonly applications: ApplicationsService,
     private readonly extraction: ExtractionService,
+    private readonly diagnostics: ExtractionDiagnosticsService,
   ) {}
   @Post("extract-preview") @HttpCode(200) extractPreview(
     @Body() dto: ExtractPreviewDto,
@@ -34,6 +36,9 @@ export class ApplicationsController {
   }
   @Get() list(@Query() query: ListApplicationsQueryDto) {
     return this.applications.list(query);
+  }
+  @Get('extraction-diagnostics') listDiagnostics(@Query('limit') limit?: string) {
+    return this.diagnostics.list(limit ? Number(limit) : undefined);
   }
   @Get(":id") get(@Param("id") id: string) {
     return this.applications.get(id);

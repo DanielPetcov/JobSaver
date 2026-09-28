@@ -8,6 +8,13 @@ export interface JobExtractionResult {
   skills: string[];
 }
 export interface JobExtractionProvider {
-  extract(page: CleanJobPage): Promise<JobExtractionResult>;
+  readonly providerName: string;
+  extract(page: CleanJobPage): Promise<unknown>;
+}
+
+export class ProviderResponseError extends Error {
+  constructor(message: string, readonly rawResponse: string | null = null) {
+    super(message);
+  }
 }
 export const JOB_EXTRACTION_PROVIDER = Symbol("JOB_EXTRACTION_PROVIDER");

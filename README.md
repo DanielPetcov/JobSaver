@@ -19,6 +19,20 @@ To use OpenRouter, set `AI_PROVIDER=openrouter`, `OPENROUTER_API_KEY`, and optio
 
 In every provider mode, the result is an editable preview and is never saved automatically.
 
+## Extraction diagnostics
+
+When an AI response cannot be parsed or fails validation, JobTrack persists a bounded diagnostic record containing the provider, source URL, validation error, and raw AI response. It intentionally does not persist the full scraped page text. After restarting the API so migration `1710000000002` runs, inspect recent failures with:
+
+```bash
+curl http://localhost:3001/api/applications/extraction-diagnostics
+```
+
+You can also review the record IDs and errors in the API container logs:
+
+```bash
+docker compose logs api --tail=100
+```
+
 ## Commands
 
 ```bash
