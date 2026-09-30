@@ -2,6 +2,12 @@
 
 A local, single-user workbench for turning public job-offer URLs into reviewed application records.
 
+## Main page
+
+The main workbench showing the URL capture flow and example saved applications.
+
+![JobTrack main page with saved applications](./image.png)
+
 ## Run it
 
 ```bash
