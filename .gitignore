@@ -5,3 +5,7 @@ coverage/
 .env
 *.log
 
+# Keep the repository landing page and UI direction; ignore other Markdown files.
+*.md
+!README.md
+!DESIGN.md
